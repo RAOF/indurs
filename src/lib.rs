@@ -12,42 +12,48 @@ enum OutputSymbol {
     Copy(u8, isize, usize)
 }
 
-struct State {
+struct State<T : AsRef<[u8]>> {
     source_indices : std::collections::HashMap<[u8 ; 3], Vec<usize>>,
+    source_data : T,
     target_indices : std::collections::HashMap<[u8 ; 3], Vec<usize>>
 }
 
-impl Default for State {
-    fn default() -> State {
+impl<T : AsRef<[u8]> + Default> Default for State<T> {
+    fn default() -> State<T> {
         State {
             source_indices : std::collections::HashMap::new(),
+            source_data : T::default(),
             target_indices : std::collections::HashMap::new()
         }
     }
 }
 
-fn populate_source(state : &mut State, data : &[u8]) {
-    for (index, str) in data.windows(3).enumerate() {
-        state.source_indices.entry(*array_ref![str,0,3]).or_insert(Vec::new()).push(index);
+impl<T : AsRef<[u8]>> State<T> {
+    fn process_source(&mut self, data : T) {
+        self.source_data = data;
+        for (index, str) in self.source_data.as_ref().windows(3).enumerate() {
+            self.source_indices.entry(*array_ref![str,0,3]).or_insert(Vec::new()).push(index);
+        }
+    }
+
+    fn encode(&mut self, target : &[u8]) -> Vec<OutputSymbol> {
+        target.into_iter().map(|byte| { OutputSymbol::Literal(*byte) }).collect()
+    }
+
+    fn decode(&mut self, encoded_data : &[OutputSymbol]) -> Vec<u8> {
+        encoded_data
+            .into_iter()
+            .map(|symbol|
+                {
+                    match *symbol {
+                        OutputSymbol::Literal(a) => a,
+                        OutputSymbol::Copy(_,_,_) => 0
+                    }
+                })
+            .collect()
     }
 }
 
-fn encode_target(state : &mut State, target : &[u8]) -> std::vec::Vec<OutputSymbol> {
-    target.into_iter().map(|byte| { OutputSymbol::Literal(*byte) }).collect()
-}
-
-fn decode_target(state : &mut State, encoded_data : &[OutputSymbol]) -> std::vec::Vec<u8> {
-    encoded_data
-        .into_iter()
-        .map(|symbol|
-            {
-                match *symbol {
-                    OutputSymbol::Literal(a) => a,
-                    OutputSymbol::Copy(_,_,_) => 0
-                }
-            })
-        .collect()
-}
 
 #[cfg(test)]
 mod tests {
@@ -56,7 +62,7 @@ mod tests {
         let mut state = State::default();
         let data = [1u8, 2u8, 3u8, 1u8, 2u8, 3u8];
 
-        populate_source(&mut state, &data);
+        state.process_source(data);
         assert_eq!(state.source_indices[&[1u8, 2u8, 3u8]], vec![0, 3]);
     }
 
@@ -65,13 +71,13 @@ mod tests {
         #[test]
         fn source_extraction_doesnt_crash(ref data in ".*") {
             let mut state = State::default();
-            populate_source(&mut state, data.as_bytes());
+            state.process_source(data.as_bytes());
         }
 
         #[test]
         fn source_extraction_calculates_one_index_per_window(ref data in ".{3,}") {
             let mut state = State::default();
-            populate_source(&mut state, data.as_bytes());
+            state.process_source(data.as_bytes());
             let index_count = state.source_indices.values().into_iter().fold(0, |acc, ref v| { acc + v.len() });
             prop_assert_eq!(index_count, data.len() - 2);
         }
@@ -79,9 +85,9 @@ mod tests {
         #[test]
         fn roundtrip_is_noop(ref source in ".{3,}", ref target in ".{3,}") {
             let mut state = State::default();
-            populate_source(&mut state, source.as_bytes());
-            let encoded_data = encode_target(&mut state, target.as_bytes());
-            let decoded_data = decode_target(&mut state, &encoded_data);
+            state.process_source(source.as_bytes());
+            let encoded_data = state.encode(target.as_bytes());
+            let decoded_data = state.decode(&encoded_data);
             prop_assert_eq!(target.as_bytes(), &*decoded_data);
         }
     }
