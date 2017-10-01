@@ -1,0 +1,11 @@
+[package]
+name = "indurs"
+version = "0.1.0"
+authors = ["Christopher James Halse Rogers <raof@ubuntu.com>"]
+
+[dependencies]
+arrayref = "^0.3.4"
+proptest = "^0.3.1"
+
+[dev-dependencies]
+
