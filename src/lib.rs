@@ -54,9 +54,11 @@ impl<T: AsRef<[u8]>> State<T> {
                         .into_iter()
                         .zip(&source[index..])
                         .position(|(&source, &target)| source != target);
+
+                    let maximum_possible_match = std::cmp::min(target.len(), source.len() - index);
                     match first_difference {
                         Some(pos) => (pos - 1, index),
-                        None => (std::cmp::min(target.len(), source.len() - index), index),
+                        None => (maximum_possible_match, index),
                     }
                 })
                 .max_by_key(|&(length, _)| length);
@@ -67,6 +69,7 @@ impl<T: AsRef<[u8]>> State<T> {
                     target = &target[length..];
                 }
                 _ => {
+                    // No match, or match less than our abitrary 3-byte threshold: emit a literal
                     result.push(OutputSymbol::Literal(target[0]));
                     target = &target[1..];
                 }
