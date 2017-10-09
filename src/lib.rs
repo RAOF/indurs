@@ -1,5 +1,3 @@
-#![feature(inclusive_range_syntax)]
-
 #[macro_use]
 extern crate arrayref;
 
@@ -82,7 +80,7 @@ impl<T: AsRef<[u8]>> State<T> {
     }
 
     fn decode(&mut self, encoded_data: &[OutputSymbol]) -> Vec<u8> {
-        let data_ref = (0u8..=255).collect::<Vec<u8>>();
+        let data_ref = (0..256).map(|x| x as u8).collect::<Vec<u8>>();
         encoded_data
             .into_iter()
             .flat_map(|symbol| match *symbol {
