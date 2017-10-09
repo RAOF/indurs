@@ -56,7 +56,7 @@ impl<T: AsRef<[u8]>> State<T> {
                         .position(|(&source, &target)| source != target);
                     match first_difference {
                         Some(pos) => (pos - 1, index),
-                        None => (std::cmp::min(target.len(),source.len() - index), index),
+                        None => (std::cmp::min(target.len(), source.len() - index), index),
                     }
                 })
                 .max_by_key(|&(length, _)| length);
@@ -86,7 +86,7 @@ impl<T: AsRef<[u8]>> State<T> {
                 OutputSymbol::Literal(a) => &data_ref[a as usize..a as usize + 1],
                 OutputSymbol::Copy(_, offset, length) => {
                     &self.source_data.as_ref()[offset as usize..offset as usize + length]
-                },
+                }
             })
             .map(|ptr| *ptr)
             .collect()
