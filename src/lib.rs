@@ -1,55 +1,94 @@
+#![feature(inclusive_range_syntax)]
+
 #[macro_use]
 extern crate arrayref;
 
 #[macro_use]
 extern crate proptest;
-use proptest::prelude::*;
 
 use std::vec::Vec;
 
+#[derive(Debug, PartialEq)]
 enum OutputSymbol {
     Literal(u8),
-    Copy(u8, isize, usize)
+    Copy(u8, isize, usize),
 }
 
-struct State<T : AsRef<[u8]>> {
-    source_indices : std::collections::HashMap<[u8 ; 3], Vec<usize>>,
-    source_data : T,
-    target_indices : std::collections::HashMap<[u8 ; 3], Vec<usize>>
+struct State<T: AsRef<[u8]>> {
+    source_indices: std::collections::HashMap<[u8; 3], Vec<usize>>,
+    source_data: T,
+    target_indices: std::collections::HashMap<[u8; 3], Vec<usize>>,
 }
 
-impl<T : AsRef<[u8]> + Default> Default for State<T> {
+impl<T: AsRef<[u8]> + Default> Default for State<T> {
     fn default() -> State<T> {
         State {
-            source_indices : std::collections::HashMap::new(),
-            source_data : T::default(),
-            target_indices : std::collections::HashMap::new()
+            source_indices: std::collections::HashMap::new(),
+            source_data: T::default(),
+            target_indices: std::collections::HashMap::new(),
         }
     }
 }
 
-impl<T : AsRef<[u8]>> State<T> {
-    fn process_source(&mut self, data : T) {
+impl<T: AsRef<[u8]>> State<T> {
+    fn process_source(&mut self, data: T) {
         self.source_data = data;
         for (index, str) in self.source_data.as_ref().windows(3).enumerate() {
-            self.source_indices.entry(*array_ref![str,0,3]).or_insert(Vec::new()).push(index);
+            self.source_indices
+                .entry(*array_ref![str, 0, 3])
+                .or_insert(Vec::new())
+                .push(index);
         }
     }
 
-    fn encode(&mut self, target : &[u8]) -> Vec<OutputSymbol> {
-        target.into_iter().map(|byte| { OutputSymbol::Literal(*byte) }).collect()
-    }
+    fn encode(&mut self, mut target: &[u8]) -> Vec<OutputSymbol> {
+        let source = self.source_data.as_ref();
+        let mut result = Vec::new();
 
-    fn decode(&mut self, encoded_data : &[OutputSymbol]) -> Vec<u8> {
-        encoded_data
-            .into_iter()
-            .map(|symbol|
-                {
-                    match *symbol {
-                        OutputSymbol::Literal(a) => a,
-                        OutputSymbol::Copy(_,_,_) => 0
+        while target.len() > 2 {
+            let longest_match = (&self.source_indices.get(array_ref![target, 0, 3]))
+                .unwrap_or(&Vec::new())
+                .into_iter()
+                .map(|&index| {
+                    let first_difference = target
+                        .into_iter()
+                        .zip(&source[index..])
+                        .position(|(&source, &target)| source != target);
+                    match first_difference {
+                        Some(pos) => (pos - 1, index),
+                        None => (std::cmp::min(target.len(),source.len() - index), index),
                     }
                 })
+                .max_by_key(|&(length, _)| length);
+
+            match longest_match {
+                Some((length, index)) if length >= 3 => {
+                    result.push(OutputSymbol::Copy(0, index as isize, length));
+                    target = &target[length..];
+                }
+                _ => {
+                    result.push(OutputSymbol::Literal(target[0]));
+                    target = &target[1..];
+                }
+            }
+        }
+        for remainder in target {
+            result.push(OutputSymbol::Literal(*remainder));
+        }
+        result
+    }
+
+    fn decode(&mut self, encoded_data: &[OutputSymbol]) -> Vec<u8> {
+        let data_ref = (0u8..=255).collect::<Vec<u8>>();
+        encoded_data
+            .into_iter()
+            .flat_map(|symbol| match *symbol {
+                OutputSymbol::Literal(a) => &data_ref[a as usize..a as usize + 1],
+                OutputSymbol::Copy(_, offset, length) => {
+                    &self.source_data.as_ref()[offset as usize..offset as usize + length]
+                },
+            })
+            .map(|ptr| *ptr)
             .collect()
     }
 }
@@ -57,6 +96,8 @@ impl<T : AsRef<[u8]>> State<T> {
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
+
     #[test]
     fn duplicate_substrings_result_in_multiple_indicies() {
         let mut state = State::default();
@@ -89,6 +130,15 @@ mod tests {
             let encoded_data = state.encode(target.as_bytes());
             let decoded_data = state.decode(&encoded_data);
             prop_assert_eq!(target.as_bytes(), &*decoded_data);
+        }
+
+        #[test]
+        fn target_identical_to_source_encodes_to_single_copy(ref source in ".{3,}") {
+            let mut state = State::default();
+            state.process_source(source.as_bytes());
+            let encoded_data = state.encode(source.as_bytes());
+
+            prop_assert_eq!(encoded_data, vec![OutputSymbol::Copy(0, 0, source.len())]);
         }
     }
 }
