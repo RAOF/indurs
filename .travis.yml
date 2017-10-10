@@ -7,3 +7,9 @@ matrix:
   allow_failures:
     - rust: nightly
 
+# CI support for bors mergebot
+branches:
+  only:
+    - staging
+    - trying
+    - master
