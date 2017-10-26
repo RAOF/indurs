@@ -109,35 +109,36 @@ mod tests {
     }
 
     use super::*;
+    use proptest::string::bytes_regex;
     proptest! {
         #[test]
-        fn source_extraction_doesnt_crash(ref data in ".*") {
-            let mut state = State::default();
-            state.process_source(data.as_bytes());
+        fn source_extraction_doesnt_crash(ref data in bytes_regex(".*").unwrap()) {
+            let mut state = State::<&[u8]>::default();
+            state.process_source(data);
         }
 
         #[test]
-        fn source_extraction_calculates_one_index_per_window(ref data in ".{3,}") {
-            let mut state = State::default();
-            state.process_source(data.as_bytes());
+        fn source_extraction_calculates_one_index_per_window(ref data in bytes_regex(".{3,}").unwrap()) {
+            let mut state = State::<&[u8]>::default();
+            state.process_source(data);
             let index_count = state.source_indices.values().into_iter().fold(0, |acc, ref v| { acc + v.len() });
             prop_assert_eq!(index_count, data.len() - 2);
         }
 
         #[test]
-        fn roundtrip_is_noop(ref source in ".{3,}", ref target in ".{3,}") {
-            let mut state = State::default();
-            state.process_source(source.as_bytes());
-            let encoded_data = state.encode(target.as_bytes());
+        fn roundtrip_is_noop(ref source in bytes_regex(".{3,}").unwrap(), ref target in bytes_regex(".{3,}").unwrap()) {
+            let mut state = State::<&[u8]>::default();
+            state.process_source(source);
+            let encoded_data = state.encode(target);
             let decoded_data = state.decode(&encoded_data);
-            prop_assert_eq!(target.as_bytes(), &*decoded_data);
+            prop_assert_eq!(target, &decoded_data);
         }
 
         #[test]
-        fn target_identical_to_source_encodes_to_single_copy(ref source in ".{3,}") {
-            let mut state = State::default();
-            state.process_source(source.as_bytes());
-            let encoded_data = state.encode(source.as_bytes());
+        fn target_identical_to_source_encodes_to_single_copy(ref source in bytes_regex(".{3,}").unwrap()) {
+            let mut state = State::<&[u8]>::default();
+            state.process_source(&source);
+            let encoded_data = state.encode(&source);
 
             prop_assert_eq!(encoded_data, vec![OutputSymbol::Copy(0, 0, source.len())]);
         }
