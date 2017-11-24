@@ -10,9 +10,15 @@ extern crate itertools;
 use std::vec::Vec;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
+enum ReferenceSource {
+    Source,
+    Target
+}
+
+#[derive(Debug, PartialEq, Copy, Clone)]
 enum OutputSymbol {
     Literal(u8),
-    Copy(u8, isize, usize),
+    Copy(ReferenceSource, isize, usize),
 }
 
 struct State<T: AsRef<[u8]>> {
@@ -94,7 +100,7 @@ impl<T: AsRef<[u8]>> State<T> {
                             .push(target_index);
                         target_index = target_index + 1;
                     }
-                    result.push(OutputSymbol::Copy(1, index as isize, target_len));
+                    result.push(OutputSymbol::Copy(ReferenceSource::Target, index as isize, target_len));
                     remaining_target = &remaining_target[target_len..];
                 }
                 ((_, _), (source_len, index)) if source_len >= 3 => {
@@ -105,7 +111,7 @@ impl<T: AsRef<[u8]>> State<T> {
                             .push(target_index);
                         target_index = target_index + 1;
                     }
-                    result.push(OutputSymbol::Copy(0, index as isize, source_len));
+                    result.push(OutputSymbol::Copy(ReferenceSource::Source, index as isize, source_len));
                     remaining_target = &remaining_target[source_len..];
                 }
                 _ => {
@@ -132,16 +138,15 @@ impl<T: AsRef<[u8]>> State<T> {
         for symbol in encoded_data {
             match *symbol {
                 OutputSymbol::Literal(a) => result.push(a),
-                OutputSymbol::Copy(0, offset, length) => {
+                OutputSymbol::Copy(ReferenceSource::Source, offset, length) => {
                     result.extend_from_slice(&self.source_data.as_ref()[offset as usize..offset as usize + length])
                 },
-                OutputSymbol::Copy(1, offset, length) => {
+                OutputSymbol::Copy(ReferenceSource::Target, offset, length) => {
                     for i in 0..length {
                         let copy = result[offset as usize + i];
                         result.push(copy);
                     }
                 }
-                OutputSymbol::Copy(_, _, _) => unreachable!("Should really make the pointer-selector an enum")
             }
         }
         result
@@ -194,7 +199,7 @@ mod tests {
             state.process_source(&source);
             let encoded_data = state.encode(&source);
 
-            prop_assert_eq!(encoded_data, vec![OutputSymbol::Copy(0, 0, source.len())]);
+            prop_assert_eq!(encoded_data, vec![OutputSymbol::Copy(ReferenceSource::Source, 0, source.len())]);
         }
 
         #[test]
@@ -215,7 +220,7 @@ mod tests {
             // length
             if let Some(final_symbol) = encoded_data.last() {
                 match *final_symbol {
-                    OutputSymbol::Copy(1, 0, length) => prop_assert!(length >= (target_fragment.len() * (repeat - 1))),
+                    OutputSymbol::Copy(ReferenceSource::Target, 0, length) => prop_assert!(length >= (target_fragment.len() * (repeat - 1))),
                     symbol => panic!("Final symbol {:?} is not a Copy", symbol)
                 }
             } else {
