@@ -10,18 +10,18 @@ extern crate itertools;
 use std::vec::Vec;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
-enum ReferenceSource {
+pub enum ReferenceSource {
     Source,
     Target
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
-enum OutputSymbol {
+pub enum OutputSymbol {
     Literal(u8),
     Copy(ReferenceSource, isize, usize),
 }
 
-struct State<T: AsRef<[u8]>> {
+pub struct State<T: AsRef<[u8]>> {
     source_indices: std::collections::HashMap<[u8; 3], Vec<usize>>,
     source_data: T,
     target_indices: std::collections::HashMap<[u8; 3], Vec<usize>>,
@@ -38,7 +38,7 @@ impl<T: AsRef<[u8]> + Default> Default for State<T> {
 }
 
 impl<T: AsRef<[u8]>> State<T> {
-    fn process_source(&mut self, data: T) {
+    pub fn process_source(&mut self, data: T) {
         self.source_data = data;
         for (index, str) in self.source_data.as_ref().windows(3).enumerate() {
             self.source_indices
@@ -48,7 +48,7 @@ impl<T: AsRef<[u8]>> State<T> {
         }
     }
 
-    fn encode(&mut self, target: &[u8]) -> Vec<OutputSymbol> {
+    pub fn encode(&mut self, target: &[u8]) -> Vec<OutputSymbol> {
         let source = self.source_data.as_ref();
         let mut result = Vec::new();
         let mut remaining_target = target;
@@ -132,7 +132,7 @@ impl<T: AsRef<[u8]>> State<T> {
         result
     }
 
-    fn decode(&mut self, encoded_data: &[OutputSymbol]) -> Vec<u8> {
+    pub fn decode(&mut self, encoded_data: &[OutputSymbol]) -> Vec<u8> {
         let mut result = Vec::new();
 
         for symbol in encoded_data {
