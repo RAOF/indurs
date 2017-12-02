@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate arrayref;
 
+#[cfg(test)]
 #[macro_use]
 extern crate proptest;
 
@@ -37,7 +38,7 @@ impl<T: AsRef<[u8]>> State<T> {
         for (index, str) in self.source_data.as_ref().windows(3).enumerate() {
             self.source_indices
                 .entry(*array_ref![str, 0, 3])
-                .or_insert(Vec::new())
+                .or_insert_with(Vec::new)
                 .push(index);
         }
     }
@@ -90,9 +91,9 @@ impl<T: AsRef<[u8]>> State<T> {
                     for skipped_data_index in 0..std::cmp::min(target_len, remaining_target.len() - 3) {
                         self.target_indices
                             .entry(*array_ref![remaining_target, skipped_data_index, 3])
-                            .or_insert(Vec::new())
+                            .or_insert_with(Vec::new)
                             .push(target_index);
-                        target_index = target_index + 1;
+                        target_index += 1;
                     }
                     result.push(OutputSymbol::Copy(1, index as isize, target_len));
                     remaining_target = &remaining_target[target_len..];
@@ -101,9 +102,9 @@ impl<T: AsRef<[u8]>> State<T> {
                     for skipped_data_index in 0..std::cmp::min(source_len, remaining_target.len() - 3) {
                         self.target_indices
                             .entry(*array_ref![remaining_target, skipped_data_index, 3])
-                            .or_insert(Vec::new())
+                            .or_insert_with(Vec::new)
                             .push(target_index);
-                        target_index = target_index + 1;
+                        target_index += 1;
                     }
                     result.push(OutputSymbol::Copy(0, index as isize, source_len));
                     remaining_target = &remaining_target[source_len..];
@@ -111,9 +112,9 @@ impl<T: AsRef<[u8]>> State<T> {
                 _ => {
                     self.target_indices
                         .entry(*array_ref![remaining_target, 0, 3])
-                        .or_insert(Vec::new())
+                        .or_insert_with(Vec::new)
                         .push(target_index);
-                    target_index = target_index + 1;
+                    target_index += 1;
 
                     result.push(OutputSymbol::Literal(remaining_target[0]));
                     remaining_target = &remaining_target[1..];
