@@ -10,12 +10,18 @@ extern crate itertools;
 use std::vec::Vec;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
-enum OutputSymbol {
-    Literal(u8),
-    Copy(u8, isize, usize),
+pub enum ReferenceSource {
+    Source,
+    Target
 }
 
-struct State<T: AsRef<[u8]>> {
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub enum OutputSymbol {
+    Literal(u8),
+    Copy(ReferenceSource, isize, usize),
+}
+
+pub struct State<T: AsRef<[u8]>> {
     source_indices: std::collections::HashMap<[u8; 3], Vec<usize>>,
     source_data: T,
     target_indices: std::collections::HashMap<[u8; 3], Vec<usize>>,
@@ -32,7 +38,7 @@ impl<T: AsRef<[u8]> + Default> Default for State<T> {
 }
 
 impl<T: AsRef<[u8]>> State<T> {
-    fn process_source(&mut self, data: T) {
+    pub fn process_source(&mut self, data: T) {
         self.source_data = data;
         for (index, str) in self.source_data.as_ref().windows(3).enumerate() {
             self.source_indices
@@ -42,7 +48,7 @@ impl<T: AsRef<[u8]>> State<T> {
         }
     }
 
-    fn encode(&mut self, target: &[u8]) -> Vec<OutputSymbol> {
+    pub fn encode(&mut self, target: &[u8]) -> Vec<OutputSymbol> {
         let source = self.source_data.as_ref();
         let mut result = Vec::new();
         let mut remaining_target = target;
@@ -94,7 +100,7 @@ impl<T: AsRef<[u8]>> State<T> {
                             .push(target_index);
                         target_index = target_index + 1;
                     }
-                    result.push(OutputSymbol::Copy(1, index as isize, target_len));
+                    result.push(OutputSymbol::Copy(ReferenceSource::Target, index as isize, target_len));
                     remaining_target = &remaining_target[target_len..];
                 }
                 ((_, _), (source_len, index)) if source_len >= 3 => {
@@ -105,7 +111,7 @@ impl<T: AsRef<[u8]>> State<T> {
                             .push(target_index);
                         target_index = target_index + 1;
                     }
-                    result.push(OutputSymbol::Copy(0, index as isize, source_len));
+                    result.push(OutputSymbol::Copy(ReferenceSource::Source, index as isize, source_len));
                     remaining_target = &remaining_target[source_len..];
                 }
                 _ => {
@@ -126,22 +132,21 @@ impl<T: AsRef<[u8]>> State<T> {
         result
     }
 
-    fn decode(&mut self, encoded_data: &[OutputSymbol]) -> Vec<u8> {
+    pub fn decode(&mut self, encoded_data: &[OutputSymbol]) -> Vec<u8> {
         let mut result = Vec::new();
 
         for symbol in encoded_data {
             match *symbol {
                 OutputSymbol::Literal(a) => result.push(a),
-                OutputSymbol::Copy(0, offset, length) => {
+                OutputSymbol::Copy(ReferenceSource::Source, offset, length) => {
                     result.extend_from_slice(&self.source_data.as_ref()[offset as usize..offset as usize + length])
                 },
-                OutputSymbol::Copy(1, offset, length) => {
+                OutputSymbol::Copy(ReferenceSource::Target, offset, length) => {
                     for i in 0..length {
                         let copy = result[offset as usize + i];
                         result.push(copy);
                     }
                 }
-                OutputSymbol::Copy(_, _, _) => unreachable!("Should really make the pointer-selector an enum")
             }
         }
         result
@@ -194,7 +199,7 @@ mod tests {
             state.process_source(&source);
             let encoded_data = state.encode(&source);
 
-            prop_assert_eq!(encoded_data, vec![OutputSymbol::Copy(0, 0, source.len())]);
+            prop_assert_eq!(encoded_data, vec![OutputSymbol::Copy(ReferenceSource::Source, 0, source.len())]);
         }
 
         #[test]
@@ -215,7 +220,7 @@ mod tests {
             // length
             if let Some(final_symbol) = encoded_data.last() {
                 match *final_symbol {
-                    OutputSymbol::Copy(1, 0, length) => prop_assert!(length >= (target_fragment.len() * (repeat - 1))),
+                    OutputSymbol::Copy(ReferenceSource::Target, 0, length) => prop_assert!(length >= (target_fragment.len() * (repeat - 1))),
                     symbol => panic!("Final symbol {:?} is not a Copy", symbol)
                 }
             } else {

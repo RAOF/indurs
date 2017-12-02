@@ -6,6 +6,10 @@ authors = ["Christopher James Halse Rogers <raof@ubuntu.com>"]
 [dependencies]
 arrayref = "^0.3.4"
 proptest = "^0.3.1"
+criterion = { git = "https://github.com/japaric/criterion.rs.git", optional=true }
 
 [dev-dependencies]
 itertools = "^0.7.2"
+
+[features]
+nightly = ["criterion"]
