@@ -21,7 +21,7 @@ use std::vec::Vec;
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum ReferenceSource {
     Source,
-    Target
+    Target,
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -109,7 +109,11 @@ impl<T: AsRef<[u8]>> State<T> {
                             .push(target_index);
                         target_index += 1;
                     }
-                    result.push(OutputSymbol::Copy(ReferenceSource::Target, index as isize, target_len));
+                    result.push(OutputSymbol::Copy(
+                        ReferenceSource::Target,
+                        index as isize,
+                        target_len,
+                    ));
                     remaining_target = &remaining_target[target_len..];
                 }
                 ((_, _), (source_len, index)) if source_len >= 3 => {
@@ -120,7 +124,11 @@ impl<T: AsRef<[u8]>> State<T> {
                             .push(target_index);
                         target_index += 1;
                     }
-                    result.push(OutputSymbol::Copy(ReferenceSource::Source, index as isize, source_len));
+                    result.push(OutputSymbol::Copy(
+                        ReferenceSource::Source,
+                        index as isize,
+                        source_len,
+                    ));
                     remaining_target = &remaining_target[source_len..];
                 }
                 _ => {
@@ -149,13 +157,11 @@ impl<T: AsRef<[u8]>> State<T> {
                 OutputSymbol::Literal(a) => result.push(a),
                 OutputSymbol::Copy(ReferenceSource::Source, offset, length) => {
                     result.extend_from_slice(&self.source_data.as_ref()[offset as usize..offset as usize + length])
-                },
-                OutputSymbol::Copy(ReferenceSource::Target, offset, length) => {
-                    for i in 0..length {
-                        let copy = result[offset as usize + i];
-                        result.push(copy);
-                    }
                 }
+                OutputSymbol::Copy(ReferenceSource::Target, offset, length) => for i in 0..length {
+                    let copy = result[offset as usize + i];
+                    result.push(copy);
+                },
             }
         }
         result
@@ -212,7 +218,10 @@ mod tests {
         }
 
         #[test]
-        fn duplicate_runs_in_destination_encode_to_copies(ref target_fragment in bytes_regex(".{3,}").unwrap(), repeat in 2..10usize) {
+        fn duplicate_runs_in_destination_encode_to_copies(
+            ref target_fragment in bytes_regex(".{3,}").unwrap(),
+            repeat in 2..10usize) {
+
             let source = Vec::<u8>::new();
             let mut state = State::<&[u8]>::default();
             state.process_source(&source);
@@ -229,7 +238,9 @@ mod tests {
             // length
             if let Some(final_symbol) = encoded_data.last() {
                 match *final_symbol {
-                    OutputSymbol::Copy(ReferenceSource::Target, 0, length) => prop_assert!(length >= (target_fragment.len() * (repeat - 1))),
+                    OutputSymbol::Copy(ReferenceSource::Target, 0, length) => {
+                        prop_assert!(length >= (target_fragment.len() * (repeat - 1)))
+                    },
                     symbol => panic!("Final symbol {:?} is not a Copy", symbol)
                 }
             } else {
