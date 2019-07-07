@@ -165,8 +165,6 @@ impl<T: AsRef<[u8]>> State<T> {
 
 #[cfg(test)]
 mod tests {
-    use itertools::Itertools;
-
     #[test]
     fn duplicate_substrings_result_in_multiple_indicies() {
         let mut state = State::default();
