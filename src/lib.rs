@@ -21,13 +21,22 @@ use std::vec::Vec;
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum ReferenceSource {
     Source,
-    Target
+    Target,
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum OutputSymbol {
     Literal(u8),
     Copy(ReferenceSource, isize, usize),
+}
+
+pub trait Encoder<T: AsRef<[u8]>> {
+    fn process_source(&mut self, data: T);
+    fn encode(&mut self, data: T) -> Vec<OutputSymbol>;
+}
+
+pub trait Decoder<T: AsRef<[u8]>> {
+    fn decode(&self, source: T, encoded_data: &[OutputSymbol]) -> Vec<u8>;
 }
 
 pub struct State<T: AsRef<[u8]>> {
@@ -46,8 +55,8 @@ impl<T: AsRef<[u8]> + Default> Default for State<T> {
     }
 }
 
-impl<T: AsRef<[u8]>> State<T> {
-    pub fn process_source(&mut self, data: T) {
+impl<T: AsRef<[u8]>> Encoder<T> for State<T> {
+    fn process_source(&mut self, data: T) {
         self.source_data = data;
         for (index, str) in self.source_data.as_ref().windows(3).enumerate() {
             self.source_indices
@@ -57,10 +66,10 @@ impl<T: AsRef<[u8]>> State<T> {
         }
     }
 
-    pub fn encode(&mut self, target: &[u8]) -> Vec<OutputSymbol> {
+    fn encode(&mut self, target: T) -> Vec<OutputSymbol> {
         let source = self.source_data.as_ref();
         let mut result = Vec::new();
-        let mut remaining_target = target;
+        let mut remaining_target = target.as_ref();
         let mut target_index = 0usize;
 
         while remaining_target.len() > 2 {
@@ -88,10 +97,10 @@ impl<T: AsRef<[u8]>> State<T> {
                 .map(|&index| {
                     let first_difference = remaining_target
                         .into_iter()
-                        .zip(&target[index..])
+                        .zip(&target.as_ref()[index..])
                         .position(|(&source, &target)| source != target);
 
-                    let maximum_possible_match = std::cmp::min(remaining_target.len(), target.len() - index);
+                    let maximum_possible_match = std::cmp::min(remaining_target.len(), target.as_ref().len() - index);
                     match first_difference {
                         Some(pos) => (pos - 1, index),
                         None => (maximum_possible_match, index),
@@ -140,16 +149,18 @@ impl<T: AsRef<[u8]>> State<T> {
         }
         result
     }
+}
 
-    pub fn decode(&mut self, encoded_data: &[OutputSymbol]) -> Vec<u8> {
+impl<T: AsRef<[u8]>> Decoder<T> for State<T> {
+    fn decode(&self, source: T, encoded_data: &[OutputSymbol]) -> Vec<u8> {
         let mut result = Vec::new();
 
         for symbol in encoded_data {
             match *symbol {
                 OutputSymbol::Literal(a) => result.push(a),
                 OutputSymbol::Copy(ReferenceSource::Source, offset, length) => {
-                    result.extend_from_slice(&self.source_data.as_ref()[offset as usize..offset as usize + length])
-                },
+                    result.extend_from_slice(&source.as_ref()[offset as usize..offset as usize + length])
+                }
                 OutputSymbol::Copy(ReferenceSource::Target, offset, length) => {
                     for i in 0..length {
                         let copy = result[offset as usize + i];
@@ -196,7 +207,7 @@ mod tests {
             let mut state = State::<&[u8]>::default();
             state.process_source(source);
             let encoded_data = state.encode(target);
-            let decoded_data = state.decode(&encoded_data);
+            let decoded_data = state.decode(source, &encoded_data);
             prop_assert_eq!(target, &decoded_data);
         }
 
