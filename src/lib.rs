@@ -18,6 +18,8 @@ extern crate itertools;
 
 use std::vec::Vec;
 
+mod lz_factor;
+
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum ReferenceSource {
     Source,
