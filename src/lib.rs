@@ -222,17 +222,22 @@ mod tests {
 
             let encoded_data = state.encode(&dest);
 
-            // target_fragment might, itself, be compressible, so all we can check
-            // is that the final symbol is a copy of at least target_fragment * repeats
-            // length
-            if let Some(final_symbol) = encoded_data.last() {
-                match *final_symbol {
-                    OutputSymbol::Copy(ReferenceSource::Target, 0, length) => prop_assert!(length >= (target_fragment.len() * (repeat - 1))),
-                    symbol => panic!("Final symbol {:?} is not a Copy", symbol)
+            let final_copies = encoded_data
+                .into_iter()
+                .rev()
+                .take_while(|item| { match item {
+                    OutputSymbol::Copy(ReferenceSource::Target, _, _) => true,
+                    _ => false
+                }});
+
+            let mut final_copy_length = 0;
+            for copy in final_copies {
+                match copy {
+                    OutputSymbol::Copy(_, _, length) => final_copy_length += length,
+                    _ => unreachable!()
                 }
-            } else {
-                panic!("Encoded data is empty?!");
             }
+            prop_assert!(final_copy_length >= (target_fragment.len() * (repeat - 1)));
         }
     }
 }
