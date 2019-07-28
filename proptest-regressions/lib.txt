@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+xs 2291953681 2854280756 1835071770 1570985866 # shrinks to ref target_fragment = [239, 191, 189, 239, 191, 128, 194, 161, 239, 191, 189], repeat = 2
+xs 2546624223 2525954884 1771596437 1007223126 # shrinks to ref source = [65, 32, 32], ref target = [239, 191, 189, 97, 239, 191, 189]
