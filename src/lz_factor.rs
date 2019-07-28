@@ -22,7 +22,7 @@ pub enum Factor {
     Special(u8)
 }
 
-pub fn factorise<T: AsMut<[u32]> + AsRef<[u32]>>(source : &[u8], suffix_array : T) -> Box<[Factor]> {
+pub fn factorise<T: AsMut<[u32]> + AsRef<[u32]>>(source : &[u8], start : usize, suffix_array : T) -> Box<[Factor]> {
     let mut phi = vec![0; source.len() + 2];
 
     let mut sa = 
@@ -33,8 +33,6 @@ pub fn factorise<T: AsMut<[u32]> + AsRef<[u32]>>(source : &[u8], suffix_array : 
 
     let mut top = 0;
 
-    println!("SA is {:?}", sa);
-
     for i in 1..=(source.len() + 1) {
         while sa[top] > sa[i] {
             phi[sa[top] as usize] = sa[i];
@@ -44,9 +42,7 @@ pub fn factorise<T: AsMut<[u32]> + AsRef<[u32]>>(source : &[u8], suffix_array : 
         sa[top] = sa[i];
     }
 
-    println!("Phi is {:?}", phi);
-    println!("Overwritten SA is {:?}", sa);
-    let mut next = 1u32;
+    let mut next = (start + 1) as u32;
 
     let mut factorised = std::vec::Vec::new();
     for t in 1..=source.len() {
@@ -83,6 +79,28 @@ fn next_factor(i : u32, source : &[u8], psv : u32, nsv : u32) -> (u32, Factor) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    
+    fn lz_expand(source : impl AsRef<[u8]>, factorised : impl AsRef<[Factor]>) -> Box<[u8]> {
+        let src = source.as_ref();
+        let mut output = std::vec::Vec::new();
+        for factor in factorised.as_ref() {
+            match *factor {
+                Factor::Special(data) => output.push(data),
+                Factor::Normal(idx, len) => {
+                    for i in idx..(idx + len) {
+                        if i < src.len() as u32 {
+                            output.push(src[i as usize]);
+                        }
+                        else {
+                            output.push(output[(i - src.len() as u32) as usize]);
+                        }
+                    }
+                }
+            }
+        }
+        output.into_boxed_slice()
+    }
+
     #[test]
     fn simple_lcp() {
         let data = [ 1, 2, 3, 1, 2, 3, 4, 5, 2, 3, 4, 1];
@@ -122,6 +140,65 @@ mod tests {
 
         let (_, suffix_array) = suffix_array::SuffixArray::new(&data).into_parts();
 
-        assert_eq!(*factorise(&data, suffix_array), expected_factorisation);
+        assert_eq!(*factorise(&data, 0, suffix_array), expected_factorisation);
+    }
+
+    #[test]
+    fn lz_factorisation_of_substring() {
+        let data = [ 1, 2, 3, 1, 2, 3, 4, 5, 2, 3, 4, 1];
+        let expected_factorisation = [
+            Factor::Normal(0, 3),
+            Factor::Special(4),
+            Factor::Special(5),
+            Factor::Normal(4, 3),
+            Factor::Normal(0, 1)
+        ];
+
+        let (_, suffix_array) = suffix_array::SuffixArray::new(&data).into_parts();
+
+        assert_eq!(*factorise(&data, 3, suffix_array), expected_factorisation);
+    }
+
+    #[test]
+    fn simple_lz_factorisation_of_substring_roundtrips() {
+        let data = [ 1, 2, 3, 1, 2, 3, 4, 5, 2, 3, 4, 1];
+
+        let (_, suffix_array) = suffix_array::SuffixArray::new(&data).into_parts();
+
+        let factorised = factorise(&data, 3, suffix_array);
+        let expanded = lz_expand(&data[..3], factorised);
+
+        assert_eq!(&*expanded, &[ 1, 2, 3, 4, 5, 2, 3, 4, 1 ]);
+    }
+
+    use proptest::prelude::*;
+
+        prop_compose! {
+            fn data_and_index()(data in proptest::collection::vec(proptest::num::u8::ANY, 2..100))
+                (index in 1..data.len(), data in Just(data)) -> (Vec<u8>, usize) {
+                (data, index)
+            }
+        }
+    use proptest::string::bytes_regex;
+    proptest! {
+        #[test]
+        fn lz_factorisation_roundtrip(ref data in bytes_regex(".*").unwrap()) {
+            let (_, suffix_array) =
+                suffix_array::SuffixArray::new(&data).into_parts();
+            
+            let factorised = factorise(&data, 0, suffix_array);
+            let no_data = [0u8; 0];
+            let ref_data : &[u8] = &data;
+            prop_assert_eq!(&*lz_expand(no_data, factorised), ref_data);
+        }
+
+        #[test]
+        fn lz_substring_factorisation_roundtrips((ref data, idx) in data_and_index()) {
+            let (_, sa) = suffix_array::SuffixArray::new(&data).into_parts();
+            
+            let factorised = factorise(&data, idx, sa);
+            let source_data = &data[0..idx];
+            prop_assert_eq!(&*lz_expand(source_data, factorised), &data[idx..]);
+        }
     }
 }
